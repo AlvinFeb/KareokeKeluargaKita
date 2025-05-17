@@ -24,7 +24,7 @@ public class RoomDialog extends JDialog {
     private void initializeComponents() {
         setLayout(new GridLayout(5, 2, 5, 5));
         
-        add(new JLabel("Username:"));
+        add(new JLabel("Name:"));
         nameField = new JTextField();
         add(nameField);
 

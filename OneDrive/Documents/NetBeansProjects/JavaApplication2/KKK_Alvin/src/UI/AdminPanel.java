@@ -8,6 +8,7 @@ import DAO.RoomDAO;
 import model.Room;
 import java.util.List;
 import javax.swing.JOptionPane;
+import javax.swing.JTable;
 import javax.swing.table.DefaultTableModel;
 
 public class AdminPanel extends javax.swing.JFrame {
@@ -23,43 +24,68 @@ public class AdminPanel extends javax.swing.JFrame {
         roomDAO = new RoomDAO();
         initializeTable();
         loadRoomsData();
+        
+        // Enable auto-resize for better table display
+        jTable1.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
     }
     
     
     private void initializeTable() {
-        tableModel = (DefaultTableModel) jTable1.getModel();
-        tableModel.setRowCount(0); // Clear existing data
-        tableModel.setColumnIdentifiers(new Object[]{"ID", "Name", "Type", "Capacity", "Hourly Rate"});
+        tableModel = new DefaultTableModel(
+            new Object[][]{},
+            new String[]{"ID", "Name", "Type", "Capacity", "Hourly Rate"}
+        ) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false; // Make table non-editable
+            }
+        };
+        jTable1.setModel(tableModel);
     }
 
     private void loadRoomsData() {
-        tableModel.setRowCount(0); // Clear table
+        // Clear existing data while preserving column headers
+        tableModel.setRowCount(0);
+        
         List<Room> rooms = roomDAO.getAllRooms();
         for (Room room : rooms) {
             tableModel.addRow(new Object[]{
                 room.getId(),
                 room.getName(),
-                room.gettype(),
+                room.gettype(),  
                 room.getCapacity(),
-                room.getHourlyRate()
+                String.format("$%.2f", room.getHourlyRate())  // Format as currency
             });
+        }
+        
+        // Auto-size columns after loading data
+        for (int i = 0; i < jTable1.getColumnCount(); i++) {
+            jTable1.getColumnModel().getColumn(i).setPreferredWidth(100);
         }
     }
     
     private void addRoom() {
         RoomDialog dialog = new RoomDialog(this, true);
         dialog.setVisible(true);
+        
         if (dialog.isConfirmed()) {
-            String username = dialog.getName();
-            String type = dialog.gettype();
+            String name = dialog.getName();
+            Type type = dialog.getType();  // Fixed to getType()
             int capacity = dialog.getCapacity();
             double hourlyRate = dialog.getHourlyRate();
 
-            if (roomDAO.addRoom(username, type, capacity, hourlyRate)) {
-                JOptionPane.showMessageDialog(this, "Room added successfully!");
-                loadRoomsData();
+            if (roomDAO.addRoom(name, type, capacity, hourlyRate)) {
+                // Refresh the table with new data
+                refreshTableWithNewRoom(name, type, capacity, hourlyRate);
+                JOptionPane.showMessageDialog(this,
+                        "Room added successfully!",
+                        "Success",
+                        JOptionPane.INFORMATION_MESSAGE);
             } else {
-                JOptionPane.showMessageDialog(this, "Failed to add room", "Error", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(this,
+                        "Failed to add room",
+                        "Error",
+                        JOptionPane.ERROR_MESSAGE);
             }
         }
     }
@@ -122,6 +148,27 @@ public class AdminPanel extends javax.swing.JFrame {
             }
         }
     }
+    
+    private void refreshTableWithNewRoom(String name, Type type, int capacity, double hourlyRate) {
+        // Get the latest data including the newly added room
+        List<Room> rooms = roomDAO.getAllRooms();
+        
+        // Find the newly added room (last one in list)
+        Room newRoom = rooms.get(rooms.size() - 1);
+        
+        // Add to table model
+        tableModel.addRow(new Object[]{
+            newRoom.getId(),
+            newRoom.getName(),
+            newRoom.gettype(),
+            newRoom.getCapacity(),
+            String.format("$%.2f", newRoom.getHourlyRate())
+        });
+        
+        // Scroll to the new row
+        jTable1.scrollRectToVisible(jTable1.getCellRect(tableModel.getRowCount()-1, 0, true));
+    }
+    
     
 
     /**
@@ -275,6 +322,10 @@ public class AdminPanel extends javax.swing.JFrame {
 
     private void AddButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_AddButtonActionPerformed
         addRoom();
+        
+        if (tableModel.getRowCount() > 0) {
+        jTable1.setRowSelectionInterval(tableModel.getRowCount()-1, tableModel.getRowCount()-1);
+    }
     }//GEN-LAST:event_AddButtonActionPerformed
 
     private void EditButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_EditButtonActionPerformed
