@@ -12,13 +12,19 @@ public class RoomDialog extends JDialog {
     private JSpinner rateSpinner;
     private boolean confirmed = false;
 
+    // Constructor for adding a new room
     public RoomDialog(java.awt.Frame parent, boolean modal) {
         super(parent, modal);
         initializeComponents();
+        setTitle("Add New Room");
     }
 
-    RoomDialog(AdminPanel aThis, boolean b, Room room) {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+    // Constructor for editing an existing room
+    public RoomDialog(java.awt.Frame parent, boolean modal, Room room) {
+        super(parent, modal);
+        initializeComponents();
+        populateFields(room);
+        setTitle("Edit Room");
     }
 
     private void initializeComponents() {
@@ -36,7 +42,7 @@ public class RoomDialog extends JDialog {
         capacitySpinner = new JSpinner(new SpinnerNumberModel(1, 1, 100, 1));
         add(capacitySpinner);
 
-        add(new JLabel("Hourly Rate:"));
+        add(new JLabel("Hourly Rate ($):"));
         rateSpinner = new JSpinner(new SpinnerNumberModel(10.0, 1.0, 1000.0, 0.5));
         add(rateSpinner);
 
@@ -52,9 +58,16 @@ public class RoomDialog extends JDialog {
         setLocationRelativeTo(getParent());
     }
 
+    private void populateFields(Room room) {
+        nameField.setText(room.getName());
+        typeComboBox.setSelectedItem(room.gettype());
+        capacitySpinner.setValue(room.getCapacity());
+        rateSpinner.setValue(room.getHourlyRate());
+    }
+
     private void confirmAction(ActionEvent e) {
         if (nameField.getText().trim().isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Username cannot be empty", "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Room name cannot be empty", "Error", JOptionPane.ERROR_MESSAGE);
             return;
         }
         confirmed = true;

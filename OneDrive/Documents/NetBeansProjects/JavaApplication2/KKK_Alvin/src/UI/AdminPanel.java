@@ -5,6 +5,7 @@
 package UI;
 
 import DAO.RoomDAO;
+import UI.RoomDialog;
 import model.Room;
 import java.util.List;
 import javax.swing.JOptionPane;
@@ -54,7 +55,7 @@ public class AdminPanel extends javax.swing.JFrame {
                 room.getName(),
                 room.gettype(),  
                 room.getCapacity(),
-                String.format("$%.2f", room.getHourlyRate())  // Format as currency
+                String.format("$%.2f", room.getHourlyRate())  
             });
         }
         
@@ -70,7 +71,7 @@ public class AdminPanel extends javax.swing.JFrame {
         
         if (dialog.isConfirmed()) {
             String name = dialog.getName();
-            Type type = dialog.getType();  // Fixed to getType()
+            String type = dialog.gettype();  // Fixed to getType()
             int capacity = dialog.getCapacity();
             double hourlyRate = dialog.getHourlyRate();
 
@@ -89,6 +90,9 @@ public class AdminPanel extends javax.swing.JFrame {
             }
         }
     }
+ 
+    
+    
     
     private void editRoom() {
         int selectedRow = jTable1.getSelectedRow();
@@ -96,6 +100,8 @@ public class AdminPanel extends javax.swing.JFrame {
             JOptionPane.showMessageDialog(this, "Please select a room to edit", "Warning", JOptionPane.WARNING_MESSAGE);
             return;
         }
+        
+        
 
         int id = (int) tableModel.getValueAt(selectedRow, 0);
         Room room = roomDAO.getRoomById(id);
@@ -149,7 +155,7 @@ public class AdminPanel extends javax.swing.JFrame {
         }
     }
     
-    private void refreshTableWithNewRoom(String name, Type type, int capacity, double hourlyRate) {
+    private void refreshTableWithNewRoom(String name, String type, int capacity, double hourlyRate) {
         // Get the latest data including the newly added room
         List<Room> rooms = roomDAO.getAllRooms();
         
