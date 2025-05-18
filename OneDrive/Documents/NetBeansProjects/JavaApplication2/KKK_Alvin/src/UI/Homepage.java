@@ -64,20 +64,20 @@ public class Homepage extends javax.swing.JFrame {
     
     private void initializeTable() {
         tableModel = new DefaultTableModel(
-            new Object[][]{},
-            new String[]{"Room Name", "Type", "Capacity", "Hourly Rate (USD)", "Book?"}
-        ) {
-            @Override
-            public Class<?> getColumnClass(int columnIndex) {
-                return columnIndex == 4 ? Boolean.class : Object.class;
-            }
-            
-            @Override
-            public boolean isCellEditable(int row, int column) {
-                return column == 4; // Only the "Book?" column is editable
-            }
-        };
-        TableContents.setModel(tableModel);
+        new Object[][]{},
+        new String[]{"Room Name", "Type", "Capacity", "Hourly Rate (USD)", "Status", "Book?"}
+    ) {
+        @Override
+        public Class<?> getColumnClass(int columnIndex) {
+            return columnIndex == 5 ? Boolean.class : Object.class;
+        }
+        
+        @Override
+        public boolean isCellEditable(int row, int column) {
+            return column == 5; // Only the "Book?" column is editable
+        }
+    };
+    TableContents.setModel(tableModel);
     }
 
     private Set<Integer> parseBookedHours(String bookedHours) {
@@ -100,50 +100,61 @@ public class Homepage extends javax.swing.JFrame {
     
     private void loadRoomsData() {
         tableModel.setRowCount(0);
-        try {
-            List<Room> rooms = roomDAO.getAllRooms();
-            for (Room room : rooms) {
-                String availability = "Available";
-                if (room.getBookedHours() != null && !room.getBookedHours().isEmpty()) {
-                    int bookedCount = room.getBookedHours().split(",").length;
-                    availability = bookedCount + "/24 hours booked";
-                }
-
-                tableModel.addRow(new Object[]{
-                    room.getName(),
-                    room.gettype(),
-                    room.getCapacity(),
-                    "$" + room.getHourlyRate(),
-                    availability,
-                    "Book" // Button text
-                });
+    try {
+        List<Room> rooms = roomDAO.getAllRooms();
+        for (Room room : rooms) {
+            String availability = "Available";
+            if (room.getBookedHours() != null && !room.getBookedHours().isEmpty()) {
+                int bookedCount = room.getBookedHours().split(",").length;
+                availability = bookedCount + "/24 hours booked";
             }
-        } catch (SQLException e) {
-            JOptionPane.showMessageDialog(this,
-                "Failed to load room data: " + e.getMessage(),
-                "Database Error",
-                JOptionPane.ERROR_MESSAGE);
+
+            tableModel.addRow(new Object[]{
+                room.getName(),
+                room.gettype(),
+                room.getCapacity(),
+                "$" + room.getHourlyRate(),
+                availability,  // Column 4: Status text
+                false          // Column 5: Booking checkbox (Boolean)
+            });
         }
+    } catch (Exception e) {
+        JOptionPane.showMessageDialog(this,
+            "Failed to load room data: " + e.getMessage(),
+            "Database Error",
+            JOptionPane.ERROR_MESSAGE);
+    }
     }
 
     private void searchRooms() {
         String type = (String) TypeComboBox.getSelectedItem();
         int minCapacity = (int) CapacitySpinner.getValue();
-        double maxPrice = (double) PriceSpinner.getValue();
-        
+
+        // Fix for ClassCastException: safely convert spinner value to double
+        Number priceValue = (Number) PriceSpinner.getValue();
+        double maxPrice = priceValue.doubleValue();
+
         tableModel.setRowCount(0); // Clear existing data
-        
+
         List<Room> rooms = roomDAO.searchRooms(type, minCapacity, maxPrice);
         for (Room room : rooms) {
+            String availability = "Available";
+            if (room.getBookedHours() != null && !room.getBookedHours().isEmpty()) {
+                int bookedCount = room.getBookedHours().split(",").length;
+                availability = bookedCount + "/24 hours booked";
+            }
+
             tableModel.addRow(new Object[]{
                 room.getName(),
                 room.gettype(),
                 room.getCapacity(),
-                room.getHourlyRate(),
-                false
+                "$" + room.getHourlyRate(),
+                availability,  // Column 4: Status text
+                false          // Column 5: Booking checkbox (Boolean)
             });
         }
     }
+        
 
     private boolean bookRoom(int rowIndex) {
         String currentBookedHours = null;
@@ -206,15 +217,17 @@ public class Homepage extends javax.swing.JFrame {
     // Add this method to handle table cell changes (for the Book? checkbox)
     private void setupTableListener() {
         TableContents.getModel().addTableModelListener(e -> {
-            if (e.getColumn() == 4) { // Book? column
-                boolean isBooked = (boolean) tableModel.getValueAt(e.getFirstRow(), 4);
-                if (isBooked) {
-                    bookRoom(e.getFirstRow());
-                    tableModel.setValueAt(false, e.getFirstRow(), 4); // Reset checkbox
-                }
+        // Check if the change is in column 5 (the actual checkbox column)
+        if (e.getColumn() == 5) { 
+            boolean isBooked = (boolean) tableModel.getValueAt(e.getFirstRow(), 5);
+            if (isBooked) {
+                bookRoom(e.getFirstRow());
+                tableModel.setValueAt(false, e.getFirstRow(), 5); // Reset checkbox
             }
+        }
         });
     }
+    
     
     
     @SuppressWarnings("unchecked")
@@ -235,6 +248,7 @@ public class Homepage extends javax.swing.JFrame {
         SearchButton = new javax.swing.JButton();
         jScrollPane1 = new javax.swing.JScrollPane();
         TableContents = new javax.swing.JTable();
+        ClearFilterButton = new javax.swing.JButton();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
 
@@ -265,6 +279,7 @@ public class Homepage extends javax.swing.JFrame {
 
         MainPanel.setBackground(new java.awt.Color(250, 237, 202));
 
+        LogoutText.setBackground(new java.awt.Color(0, 0, 0));
         LogoutText.setText("Log Out");
         LogoutText.addMouseListener(new java.awt.event.MouseAdapter() {
             public void mouseClicked(java.awt.event.MouseEvent evt) {
@@ -272,20 +287,24 @@ public class Homepage extends javax.swing.JFrame {
             }
         });
 
+        SearchFitersText.setBackground(new java.awt.Color(0, 0, 0));
         SearchFitersText.setFont(new java.awt.Font("Segoe UI", 1, 18)); // NOI18N
         SearchFitersText.setText("Search Filters:");
 
-        TypeComboBox.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Small", "Medium", "Large" }));
+        TypeComboBox.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Small", "Medium", "Large", "VIP" }));
         TypeComboBox.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 TypeComboBoxActionPerformed(evt);
             }
         });
 
+        TypeText.setBackground(new java.awt.Color(0, 0, 0));
         TypeText.setText("Type");
 
+        CapacityText.setBackground(new java.awt.Color(0, 0, 0));
         CapacityText.setText("Capacity (Minimum)");
 
+        PriceText.setBackground(new java.awt.Color(0, 0, 0));
         PriceText.setText("Price (Maximum)");
 
         SearchButton.setText("Search");
@@ -322,6 +341,13 @@ public class Homepage extends javax.swing.JFrame {
         });
         jScrollPane1.setViewportView(TableContents);
 
+        ClearFilterButton.setText("Clear Filter");
+        ClearFilterButton.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                ClearFilterButtonActionPerformed(evt);
+            }
+        });
+
         javax.swing.GroupLayout MainPanelLayout = new javax.swing.GroupLayout(MainPanel);
         MainPanel.setLayout(MainPanelLayout);
         MainPanelLayout.setHorizontalGroup(
@@ -336,7 +362,6 @@ public class Homepage extends javax.swing.JFrame {
                         .addComponent(SearchFitersText)
                         .addGap(27, 27, 27)
                         .addGroup(MainPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
-                            .addComponent(SearchButton, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                             .addGroup(MainPanelLayout.createSequentialGroup()
                                 .addComponent(TypeText)
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
@@ -346,9 +371,12 @@ public class Homepage extends javax.swing.JFrame {
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                                 .addComponent(CapacitySpinner, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                                 .addGap(18, 18, 18)
-                                .addComponent(PriceText)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(PriceSpinner, javax.swing.GroupLayout.PREFERRED_SIZE, 90, javax.swing.GroupLayout.PREFERRED_SIZE)))
+                                .addComponent(PriceText))
+                            .addComponent(SearchButton, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addGroup(MainPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
+                            .addComponent(PriceSpinner, javax.swing.GroupLayout.DEFAULT_SIZE, 90, Short.MAX_VALUE)
+                            .addComponent(ClearFilterButton, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
                         .addGap(0, 0, Short.MAX_VALUE)))
                 .addContainerGap())
             .addGroup(MainPanelLayout.createSequentialGroup()
@@ -373,13 +401,15 @@ public class Homepage extends javax.swing.JFrame {
                                     .addComponent(PriceText)
                                     .addComponent(PriceSpinner, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))))
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addComponent(SearchButton, javax.swing.GroupLayout.PREFERRED_SIZE, 25, javax.swing.GroupLayout.PREFERRED_SIZE))
+                        .addGroup(MainPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                            .addComponent(SearchButton, javax.swing.GroupLayout.PREFERRED_SIZE, 25, javax.swing.GroupLayout.PREFERRED_SIZE)
+                            .addComponent(ClearFilterButton, javax.swing.GroupLayout.PREFERRED_SIZE, 25, javax.swing.GroupLayout.PREFERRED_SIZE)))
                     .addGroup(MainPanelLayout.createSequentialGroup()
                         .addGap(41, 41, 41)
                         .addComponent(SearchFitersText, javax.swing.GroupLayout.PREFERRED_SIZE, 26, javax.swing.GroupLayout.PREFERRED_SIZE)))
                 .addGap(18, 18, 18)
                 .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 228, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addContainerGap(23, Short.MAX_VALUE))
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
         );
 
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
@@ -413,6 +443,20 @@ public class Homepage extends javax.swing.JFrame {
         this.dispose();
         new Login().setVisible(true);
     }//GEN-LAST:event_LogoutTextMouseClicked
+
+    private void ClearFilterButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_ClearFilterButtonActionPerformed
+        loadRoomsData();
+
+        // Optionally reset filter controls to default values
+        TypeComboBox.setSelectedIndex(0); // Reset to first item
+        CapacitySpinner.setValue(0);      // Reset to minimum capacity
+        PriceSpinner.setValue(100);       // Reset to default max price (adjust as needed)
+
+        JOptionPane.showMessageDialog(this,
+            "Filters cleared and all rooms displayed.",
+            "Filters Cleared",
+            JOptionPane.INFORMATION_MESSAGE);
+    }//GEN-LAST:event_ClearFilterButtonActionPerformed
 
     /**
      * @param args the command line arguments
@@ -452,6 +496,7 @@ public class Homepage extends javax.swing.JFrame {
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JSpinner CapacitySpinner;
     private javax.swing.JLabel CapacityText;
+    private javax.swing.JButton ClearFilterButton;
     private javax.swing.JLabel LogoutText;
     private javax.swing.JPanel MainPanel;
     private javax.swing.JSpinner PriceSpinner;

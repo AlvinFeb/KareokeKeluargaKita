@@ -23,7 +23,7 @@ public class RoomDAO {
 
     public Room getRoomById(int id) {
         String sql = "SELECT id, name, type, capacity, hourly_rate FROM rooms WHERE id = ?";
-        try (PreparedStatement pst = connection.prepareStatement(sql)) {
+        try (PreparedStatement pst = getValidConnection().prepareStatement(sql)) {
             pst.setInt(1, id);
             ResultSet rs = pst.executeQuery();
         
@@ -45,7 +45,7 @@ public class RoomDAO {
     public boolean addRoom(String name, String type, int capacity, double hourlyRate) {
         try {
             String sql = "INSERT INTO rooms (name, type, capacity, hourly_rate) VALUES (?, ?, ?, ?)";
-            PreparedStatement pst = connection.prepareStatement(sql);
+            PreparedStatement pst = getValidConnection().prepareStatement(sql);
             pst.setString(1, name);
             pst.setString(2, type);  
             pst.setInt(3, capacity);
@@ -62,17 +62,19 @@ public class RoomDAO {
     public List<Room> getAllRooms() {
         List<Room> rooms = new ArrayList<>();
         try {
-            Statement st = connection.createStatement();
-            ResultSet rs = st.executeQuery("SELECT id, name, type, capacity, hourly_rate FROM rooms");
+            Statement st = getValidConnection().createStatement();
+            ResultSet rs = st.executeQuery("SELECT id, name, type, capacity, hourly_rate, booked_hours FROM rooms");
             
             while (rs.next()) {
-                rooms.add(new Room(
+                Room room = new Room(
                     rs.getInt("id"),
                     rs.getString("name"), 
                     rs.getString("type"),
                     rs.getInt("capacity"),
                     rs.getDouble("hourly_rate")
-                ));
+                );
+                room.setBookedHours(rs.getString("booked_hours"));
+                rooms.add(room);
             }
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(null, "Error loading rooms: " + e.getMessage());
@@ -84,7 +86,7 @@ public class RoomDAO {
     public boolean updateRoom(Room room) {
         try {
             String sql = "UPDATE rooms SET name = ?, type = ?, capacity = ?, hourly_rate = ? WHERE id = ?";
-            PreparedStatement pst = connection.prepareStatement(sql);
+            PreparedStatement pst = getValidConnection().prepareStatement(sql);
             pst.setString(1, room.getName());  
             pst.setString(2, room.gettype());
             pst.setInt(3, room.getCapacity());
@@ -101,7 +103,7 @@ public class RoomDAO {
     // Delete operation remains the same
     public boolean deleteRoom(int id) {
         try {
-            PreparedStatement pst = connection.prepareStatement("DELETE FROM rooms WHERE id = ?");
+            PreparedStatement pst = getValidConnection().prepareStatement("DELETE FROM rooms WHERE id = ?");
             pst.setInt(1, id);
             return pst.executeUpdate() > 0;
         } catch (SQLException e) {
@@ -130,9 +132,9 @@ public class RoomDAO {
         List<Room> rooms = new ArrayList<>();
         String sql = "SELECT * FROM rooms WHERE is_booked = false";
         
-        try (Connection conn = getValidConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
+        try {
+            Statement stmt = getValidConnection().createStatement();
+            ResultSet rs = stmt.executeQuery(sql);
             
             while (rs.next()) {
                 rooms.add(extractRoomFromResultSet(rs));
@@ -145,49 +147,49 @@ public class RoomDAO {
 
     public List<Room> searchRooms(String type, int minCapacity, double maxPrice) {
         List<Room> rooms = new ArrayList<>();
-        String sql = "SELECT * FROM rooms WHERE type = ? AND capacity >= ? AND hourly_rate <= ? AND is_booked = false";
+        String sql = "SELECT * FROM rooms WHERE type = ? AND capacity >= ? AND hourly_rate <= ?";
         
-        try (Connection conn = getValidConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
+        try {
+            PreparedStatement stmt = getValidConnection().prepareStatement(sql);
             
             stmt.setString(1, type.toLowerCase());
             stmt.setInt(2, minCapacity);
             stmt.setDouble(3, maxPrice);
             
-            try (ResultSet rs = stmt.executeQuery()) {
-                while (rs.next()) {
-                    rooms.add(extractRoomFromResultSet(rs));
-                }
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                Room room = extractRoomFromResultSet(rs);
+                rooms.add(room);
             }
         } catch (SQLException e) {
+            JOptionPane.showMessageDialog(null, "Error searching rooms: " + e.getMessage());
             e.printStackTrace();
         }
         return rooms;
     }
 
     public boolean bookRoom(String roomName, int startHour, int duration) throws SQLException {
-        try (Connection conn = getConnection()) {
-            // 1. Check available hours
-            String bookedHours = getBookedHours(conn, roomName);
-            Set<Integer> unavailableHours = parseBookedHours(bookedHours);
-            
-            // 2. Validate requested time slot
-            for (int i = startHour; i < startHour + duration; i++) {
-                int hour = i % 24; // Handle overflow
-                if (unavailableHours.contains(hour)) {
-                    return false; // Hour already booked
-                }
+        Connection conn = getValidConnection();
+        // 1. Check available hours
+        String bookedHours = getBookedHours(conn, roomName);
+        Set<Integer> unavailableHours = parseBookedHours(bookedHours);
+        
+        // 2. Validate requested time slot
+        for (int i = startHour; i < startHour + duration; i++) {
+            int hour = i % 24; // Handle overflow
+            if (unavailableHours.contains(hour)) {
+                return false; // Hour already booked
             }
-            
-            // 3. Update database
-            String newBookedHours = updateBookedHours(bookedHours, startHour, duration);
-            String sql = "UPDATE rooms SET booked_hours = ? WHERE name = ?";
-            
-            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-                stmt.setString(1, newBookedHours);
-                stmt.setString(2, roomName);
-                return stmt.executeUpdate() > 0;
-            }
+        }
+        
+        // 3. Update database
+        String newBookedHours = updateBookedHours(bookedHours, startHour, duration);
+        String sql = "UPDATE rooms SET booked_hours = ? WHERE name = ?";
+        
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, newBookedHours);
+            stmt.setString(2, roomName);
+            return stmt.executeUpdate() > 0;
         }
     }
     
@@ -204,7 +206,11 @@ public class RoomDAO {
         Set<Integer> hours = new HashSet<>();
         if (bookedHours != null && !bookedHours.isEmpty()) {
             for (String hour : bookedHours.split(",")) {
-                hours.add(Integer.valueOf(hour.trim()));
+                try {
+                    hours.add(Integer.valueOf(hour.trim()));
+                } catch (NumberFormatException e) {
+                    // Skip invalid entries
+                }
             }
         }
         return hours;
@@ -221,7 +227,7 @@ public class RoomDAO {
 
     private void initializeConnection() {
         try {
-        Class.forName("com.mysql.cj.jdbc.Driver");
+            Class.forName("com.mysql.cj.jdbc.Driver");
             
             if (connection == null || connection.isClosed()) {
                 connection = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
@@ -236,29 +242,35 @@ public class RoomDAO {
     
 
     private Room extractRoomFromResultSet(ResultSet rs) {
-    try {
-        return new Room(
-            rs.getInt("id"),
-            rs.getString("name"),
-            rs.getString("type"),
-            rs.getInt("capacity"),
-            rs.getDouble("hourly_rate")
-        );
-    } catch (SQLException e) {
-
-        System.err.println("Error extracting room from result set: " + e.getMessage());
-
-        throw new RuntimeException("Failed to extract room data from database", e);
-
+        try {
+            Room room = new Room(
+                rs.getInt("id"),
+                rs.getString("name"),
+                rs.getString("type"),
+                rs.getInt("capacity"),
+                rs.getDouble("hourly_rate")
+            );
+            
+            // Get booked_hours if available
+            try {
+                String bookedHours = rs.getString("booked_hours");
+                room.setBookedHours(bookedHours);
+            } catch (SQLException e) {
+                // Column might not exist in all queries, ignore
+            }
+            
+            return room;
+        } catch (SQLException e) {
+            System.err.println("Error extracting room from result set: " + e.getMessage());
+            throw new RuntimeException("Failed to extract room data from database", e);
+        }
     }
-}
 
     public void close() {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+        closeConnection();    
     }
 
-    private Connection getConnection() {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+    private Connection getConnection() throws SQLException {
+        return getValidConnection();
     }
-
 }
