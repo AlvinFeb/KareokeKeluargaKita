@@ -4,14 +4,22 @@
  */
 package UI;
 
-import DAO.RoomDAO;
-import model.Room;
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
-import java.util.List;
 import java.awt.*;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
+import javax.swing.JOptionPane;
+
+// Database and Models
+import DAO.RoomDAO;
+import model.Room;
+
+// Utilities
+import java.sql.SQLException;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import java.util.stream.Collectors;
 
 /**
  *
@@ -72,18 +80,49 @@ public class Homepage extends javax.swing.JFrame {
         TableContents.setModel(tableModel);
     }
 
+    private Set<Integer> parseBookedHours(String bookedHours) {
+        Set<Integer> hours = new HashSet<>(); // Initialize empty set
+
+        if (bookedHours != null && !bookedHours.trim().isEmpty()) {
+            // Split by comma and convert each to integer
+            String[] hourStrings = bookedHours.split(",");
+            for (String hourStr : hourStrings) {
+                try {
+                    hours.add(Integer.valueOf(hourStr.trim()));
+                } catch (NumberFormatException e) {
+                    System.err.println("Invalid hour format: " + hourStr);
+                    // Continue with valid hours
+                }
+            }
+        }
+        return hours;
+    }
+    
     private void loadRoomsData() {
-        tableModel.setRowCount(0); // Clear existing data
-        
-        List<Room> rooms = roomDAO.getAllAvailableRooms(); // Need to implement this in RoomDAO
-        for (Room room : rooms) {
-            tableModel.addRow(new Object[]{
-                room.getName(),
-                room.gettype(),
-                room.getCapacity(),
-                room.getHourlyRate(),
-                false // Default to not booked
-            });
+        tableModel.setRowCount(0);
+        try {
+            List<Room> rooms = roomDAO.getAllRooms();
+            for (Room room : rooms) {
+                String availability = "Available";
+                if (room.getBookedHours() != null && !room.getBookedHours().isEmpty()) {
+                    int bookedCount = room.getBookedHours().split(",").length;
+                    availability = bookedCount + "/24 hours booked";
+                }
+
+                tableModel.addRow(new Object[]{
+                    room.getName(),
+                    room.gettype(),
+                    room.getCapacity(),
+                    "$" + room.getHourlyRate(),
+                    availability,
+                    "Book" // Button text
+                });
+            }
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this,
+                "Failed to load room data: " + e.getMessage(),
+                "Database Error",
+                JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -106,41 +145,62 @@ public class Homepage extends javax.swing.JFrame {
         }
     }
 
-    private void bookRoom(int rowIndex) {
+    private boolean bookRoom(int rowIndex) {
+        String currentBookedHours = null;
+        Set<Integer> bookedHours = parseBookedHours(currentBookedHours);
+        if (bookedHours.size() >= 24) {
+            JOptionPane.showMessageDialog(this,
+                "This room is completely booked for all 24 hours!",
+                "Fully Booked",
+                JOptionPane.WARNING_MESSAGE);
+            return false;
+        }
+        
         String roomName = (String) tableModel.getValueAt(rowIndex, 0);
-        
-        // Show time selection dialog
-        JSpinner timeSpinner = new JSpinner(new SpinnerNumberModel(1, 1, 24, 1));
+    
+        // Create booking panel
         JPanel panel = new JPanel(new GridLayout(0, 1));
-        panel.add(new JLabel("Select booking duration (hours):"));
-        panel.add(timeSpinner);
-        
+    
+        // Start hour selection
+        JSpinner startSpinner = new JSpinner(new SpinnerNumberModel(0, 0, 23, 1));
+        panel.add(new JLabel("Start Hour (0-23):"));
+        panel.add(startSpinner);
+    
+        // Duration selection
+        JSpinner durationSpinner = new JSpinner(new SpinnerNumberModel(1, 1, 24, 1));
+        panel.add(new JLabel("Duration (hours):"));
+        panel.add(durationSpinner);
+
         int result = JOptionPane.showConfirmDialog(
-            this, 
-            panel, 
-            "Book Room: " + roomName, 
-            JOptionPane.OK_CANCEL_OPTION, 
-            JOptionPane.PLAIN_MESSAGE
-        );
-        
+            this, panel, "Book Room: " + roomName,
+            JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+
         if (result == JOptionPane.OK_OPTION) {
-            int hours = (int) timeSpinner.getValue();
-            LocalDate tomorrow = LocalDate.now().plusDays(1);
-            String bookingDate = tomorrow.format(DateTimeFormatter.ISO_LOCAL_DATE);
-            
-            if (roomDAO.bookRoom(roomName, bookingDate, hours)) {
-                JOptionPane.showMessageDialog(this, 
-                    "Room " + roomName + " booked successfully for " + hours + " hours on " + bookingDate,
-                    "Booking Confirmation",
-                    JOptionPane.INFORMATION_MESSAGE);
-                loadRoomsData(); // Refresh the table
-            } else {
+            int startHour = (int) startSpinner.getValue();
+            int duration = (int) durationSpinner.getValue();
+
+            try {
+                if (roomDAO.bookRoom(roomName, startHour, duration)) {
+                    JOptionPane.showMessageDialog(this,
+                        "Booked " + roomName + " from hour " + startHour + 
+                        " to " + ((startHour + duration) % 24) +
+                        "\nTotal hours: " + duration,
+                        "Booking Confirmed",
+                        JOptionPane.INFORMATION_MESSAGE);
+                } else {
+                    JOptionPane.showMessageDialog(this,
+                        "Some hours are already booked!\nPlease choose different time.",
+                        "Booking Failed",
+                        JOptionPane.WARNING_MESSAGE);
+                }
+            } catch (SQLException e) {
                 JOptionPane.showMessageDialog(this,
-                    "Failed to book room",
+                    "Database error: " + e.getMessage(),
                     "Error",
                     JOptionPane.ERROR_MESSAGE);
             }
         }
+        return false;
     }
 
     // Add this method to handle table cell changes (for the Book? checkbox)
@@ -405,4 +465,8 @@ public class Homepage extends javax.swing.JFrame {
     private javax.swing.JLabel TypeText;
     private javax.swing.JScrollPane jScrollPane1;
     // End of variables declaration//GEN-END:variables
+
+    private String getBookedHoursFromDatabase(String roomName) {
+        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+    }
 }

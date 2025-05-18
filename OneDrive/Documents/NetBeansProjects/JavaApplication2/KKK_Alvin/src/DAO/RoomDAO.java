@@ -5,13 +5,17 @@ import model.Room;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import javax.swing.JOptionPane;
+import java.util.HashSet;
+
 
 public class RoomDAO {
     private Connection connection;
-    private static final String DB_URL = "jdbc:mysql://localhost:3306/your_database_name";
-    private static final String DB_USER = "your_username";
-    private static final String DB_PASSWORD = "your_password";
+    private static final String DB_URL = "jdbc:mysql://localhost:3306/kkk_db";
+    private static final String DB_USER = "root";
+    private static final String DB_PASSWORD = "";
 
     public RoomDAO() {
         this.connection = DatabaseConnection.connectDB();
@@ -106,6 +110,7 @@ public class RoomDAO {
         }
     }
 
+
     public void closeConnection() {
         try {
             if (connection != null) connection.close();
@@ -160,26 +165,59 @@ public class RoomDAO {
         return rooms;
     }
 
-    public boolean bookRoom(String roomName, String bookingDate, int hours) {
-        String sql = "UPDATE rooms SET is_booked = true, booking_date = ?, booking_hours = ? WHERE name = ?";
-    
-        try (Connection conn = getValidConnection();
-            PreparedStatement stmt = conn.prepareStatement(sql)) {
-        
-            // Fixed: using bookingDate parameter instead of undefined date variable
-            stmt.setString(1, bookingDate);
-            stmt.setInt(2, hours);
-            stmt.setString(3, roomName);
-        
-            return stmt.executeUpdate() > 0;
-        } catch (SQLException e) {
-            // Better error handling than printStackTrace()
-            System.err.println("Error booking room: " + e.getMessage());
-            // Or log using a proper logging framework
-            // logger.error("Error booking room", e);
-            return false;
+    public boolean bookRoom(String roomName, int startHour, int duration) throws SQLException {
+        try (Connection conn = getConnection()) {
+            // 1. Check available hours
+            String bookedHours = getBookedHours(conn, roomName);
+            Set<Integer> unavailableHours = parseBookedHours(bookedHours);
+            
+            // 2. Validate requested time slot
+            for (int i = startHour; i < startHour + duration; i++) {
+                int hour = i % 24; // Handle overflow
+                if (unavailableHours.contains(hour)) {
+                    return false; // Hour already booked
+                }
+            }
+            
+            // 3. Update database
+            String newBookedHours = updateBookedHours(bookedHours, startHour, duration);
+            String sql = "UPDATE rooms SET booked_hours = ? WHERE name = ?";
+            
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                stmt.setString(1, newBookedHours);
+                stmt.setString(2, roomName);
+                return stmt.executeUpdate() > 0;
+            }
         }
     }
+    
+    private String getBookedHours(Connection conn, String roomName) throws SQLException {
+        String sql = "SELECT booked_hours FROM rooms WHERE name = ?";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, roomName);
+            ResultSet rs = stmt.executeQuery();
+            return rs.next() ? rs.getString("booked_hours") : null;
+        }
+    }
+
+    private Set<Integer> parseBookedHours(String bookedHours) {
+        Set<Integer> hours = new HashSet<>();
+        if (bookedHours != null && !bookedHours.isEmpty()) {
+            for (String hour : bookedHours.split(",")) {
+                hours.add(Integer.valueOf(hour.trim()));
+            }
+        }
+        return hours;
+    }
+
+    private String updateBookedHours(String current, int start, int duration) {
+        Set<Integer> hours = parseBookedHours(current);
+        for (int i = start; i < start + duration; i++) {
+            hours.add(i % 24);
+        }
+        return hours.stream().map(String::valueOf).collect(Collectors.joining(","));
+    }
+
 
     private void initializeConnection() {
         try {
@@ -218,4 +256,9 @@ public class RoomDAO {
     public void close() {
         throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
     }
+
+    private Connection getConnection() {
+        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+    }
+
 }

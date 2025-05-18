@@ -6,6 +6,16 @@ public class Room {
     private final String type;
     private final int capacity;
     private final double hourlyRate;
+    
+    private String bookedHours;
+    
+    public String getBookedHours() {
+        return bookedHours;
+    }
+    
+    public void setBookedHours(String bookedHours) {
+        this.bookedHours = bookedHours;
+    }
 
     public Room(int id, String name, String type, int capacity, double hourlyRate) {
         this.id = id;
@@ -13,6 +23,8 @@ public class Room {
         this.type = type;
         this.capacity = capacity;
         this.hourlyRate = hourlyRate;
+        
+        
     }
 
     // Getters - MUST match exactly what's called in AdminPanel
@@ -21,4 +33,6 @@ public class Room {
     public String gettype() { return type; }  // Fixed typo from gettype() to getType()
     public int getCapacity() { return capacity; }
     public double getHourlyRate() { return hourlyRate; }
+
+    
 }
